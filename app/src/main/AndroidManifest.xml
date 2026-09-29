@@ -12,6 +12,9 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.FLASHLIGHT" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
 
     <application
@@ -40,6 +43,18 @@
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
         </service>
+        <service
+            android:name=".system.FloatingAssistantService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-enabled floating assistant bubble for opening installed apps on demand" />
+        </service>
+        <activity
+            android:name=".system.OverlayCommandActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.NeedleAssistant.Overlay" />
     </application>
-
 </manifest>

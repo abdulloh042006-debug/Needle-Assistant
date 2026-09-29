@@ -5,7 +5,10 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.speech.RecognizerIntent
+import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -32,6 +35,7 @@ import androidx.core.content.ContextCompat
 import androidx.navigation3.runtime.NavKey
 import com.needleassistant.app.R
 import com.needleassistant.app.system.DeviceController
+import com.needleassistant.app.system.FloatingAssistantService
 import com.needleassistant.app.system.SpeechOutputState
 import kotlinx.coroutines.launch
 
@@ -55,6 +59,26 @@ fun MainScreen(
 
     var isListening by remember { mutableStateOf(false) }
     var showQuickActions by remember { mutableStateOf(true) }
+    var floatingAssistantEnabled by remember { mutableStateOf(FloatingAssistantService.isEnabled(context)) }
+
+    val overlayPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (Settings.canDrawOverlays(context)) {
+            try {
+                val serviceIntent = Intent(context, FloatingAssistantService::class.java)
+                    .setAction(FloatingAssistantService.ACTION_START)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(serviceIntent)
+                else context.startService(serviceIntent)
+                floatingAssistantEnabled = true
+                messages.add(Message("Suzuvchi Needle tugmasi yoqildi. Boshqa ilovada ham ekrandagi N tugmasini bosing.", isUser = false))
+            } catch (_: SecurityException) {
+                messages.add(Message("Suzuvchi tugmani yoqib bo'lmadi. Ruxsatlar va bildirishnoma sozlamalarini tekshiring.", isUser = false))
+            }
+        } else {
+            messages.add(Message("Suzuvchi tugma uchun boshqa ilovalar ustida ko'rsatish ruxsati kerak.", isUser = false))
+        }
+    }
 
     DisposableEffect(deviceController) {
         onDispose { deviceController.shutdown() }
@@ -171,6 +195,32 @@ fun MainScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = {
+                        if (floatingAssistantEnabled) {
+                            context.stopService(Intent(context, FloatingAssistantService::class.java))
+                            floatingAssistantEnabled = false
+                            messages.add(Message("Suzuvchi Needle tugmasi o'chirildi.", isUser = false))
+                        } else if (Settings.canDrawOverlays(context)) {
+                            try {
+                                val serviceIntent = Intent(context, FloatingAssistantService::class.java)
+                                    .setAction(FloatingAssistantService.ACTION_START)
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(serviceIntent)
+                                else context.startService(serviceIntent)
+                                floatingAssistantEnabled = true
+                                messages.add(Message("Suzuvchi Needle tugmasi yoqildi. Boshqa ilovada ham ekrandagi N tugmasini bosing.", isUser = false))
+                            } catch (_: SecurityException) {
+                                messages.add(Message("Suzuvchi tugmani yoqib bo'lmadi. Ruxsatlar va bildirishnoma sozlamalarini tekshiring.", isUser = false))
+                            }
+                        } else {
+                            val settingsIntent = Intent(
+                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:${context.packageName}")
+                            )
+                            overlayPermissionLauncher.launch(settingsIntent)
+                        }
+                    }) {
+                        Text(if (floatingAssistantEnabled) "N●" else "N+", fontSize = 16.sp)
+                    }
                     if (isSpeaking) {
                         IconButton(onClick = {
                             deviceController.stopSpeaking()
