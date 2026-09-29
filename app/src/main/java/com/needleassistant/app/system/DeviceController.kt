@@ -3,6 +3,7 @@ package com.needleassistant.app.system
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.hardware.camera2.CameraManager
 import android.media.AudioManager
 import android.media.session.MediaController
@@ -194,6 +195,10 @@ class DeviceController(private val context: Context) : TextToSpeech.OnInitListen
 
     fun processCommand(command: String): String {
         val c = command.lowercase(Locale.getDefault()).trim()
+        parseTelegramCommand(command)?.let { return openTelegramChat(it) }
+        parseMessageDraftCommand(command)?.let { return openSmsDraft(it) }
+        parseDialCommand(command)?.let { return openDialer(it) }
+        parseScrollCommand(c)?.let { return scrollContent(it) }
         parseMediaAction(c)?.let { return controlMedia(it) }
         return when {
             // Fonar
@@ -300,6 +305,66 @@ class DeviceController(private val context: Context) : TextToSpeech.OnInitListen
         }
     }
 
+    private fun openTelegramChat(command: TelegramChatCommand): String {
+        val encodedText = command.message?.let(Uri::encode)
+        val uri = buildString {
+            append("tg://resolve?domain=")
+            append(Uri.encode(command.username))
+            if (encodedText != null) {
+                append("&text=")
+                append(encodedText)
+            }
+        }
+        val telegramIntent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try {
+            context.startActivity(telegramIntent)
+            if (command.message == null) {
+                "Telegram chat ochildi. Xabar yuborish uchun Telegram ichida tasdiqlang."
+            } else {
+                "Telegram chat ochildi va xabar matni tayyorlandi. Yuborishni Telegram ichida o'zingiz tasdiqlang."
+            }
+        } catch (_: ActivityNotFoundException) {
+            "Telegram topilmadi. Telegram o'rnatilganini tekshiring."
+        } catch (_: SecurityException) {
+            "Telegram chatini ochishga ruxsat berilmadi."
+        }
+    }
+
+    private fun openSmsDraft(command: MessageDraftCommand): String {
+        val intent = Intent(Intent.ACTION_SENDTO, Uri.fromParts("smsto", command.phoneNumber, null))
+            .putExtra("sms_body", command.message)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try {
+            context.startActivity(intent)
+            "SMS yozish oynasi ochildi. Xabarni ko'rib, yuborishni o'zingiz tasdiqlang."
+        } catch (_: ActivityNotFoundException) {
+            "SMS ilovasi topilmadi."
+        } catch (_: SecurityException) {
+            "SMS yozish oynasini ochishga ruxsat berilmadi."
+        }
+    }
+
+    private fun openDialer(phoneNumber: String): String {
+        val intent = Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", phoneNumber, null))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try {
+            context.startActivity(intent)
+            "Raqam terish oynasi ochildi. Qo'ng'iroqni o'zingiz boshlang."
+        } catch (_: ActivityNotFoundException) {
+            "Telefon ilovasi topilmadi."
+        } catch (_: SecurityException) {
+            "Telefon oynasini ochishga ruxsat berilmadi."
+        }
+    }
+
+    private fun scrollContent(forward: Boolean): String =
+        if (NeedleAccessibilityService.scroll(forward)) {
+            if (forward) "Ekran pastga aylantirildi." else "Ekran yuqoriga aylantirildi."
+        } else {
+            "Scroll uchun Needle Accessibility xizmatini Android sozlamalaridan yoqing. Ilova ichidagi ayrim ekranlar scrollni qo'llamasligi mumkin."
+        }
+
     private fun controlMedia(action: MediaAction): String {
         val sessionManager = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
         val sessions = try {
@@ -357,6 +422,10 @@ class DeviceController(private val context: Context) : TextToSpeech.OnInitListen
 🔊 "ovozni ko'tar" / "ovozni past qil"
 🎵 "musiqani qo'y" / "musiqani to'xtat"
 ⏭ "keyingi qo'shiq" / "oldingi trek"
+📜 "pastga scroll" / "yuqoriga scroll" (Accessibility yoqilgan bo'lishi kerak)
+📞 "qo'ng'iroq +998..." (raqam terish oynasini ochadi)
+✉️ "sms +998... salom" (SMS yozish oynasini ochadi)
+💬 "telegram @username ga xabar salom"
 📷 "kamerani och"
 🧮 "kalkulyatorni och"
 📱 "telegramni och"
@@ -379,6 +448,55 @@ internal enum class MediaAction {
     PAUSE,
     NEXT,
     PREVIOUS
+}
+
+internal data class TelegramChatCommand(val username: String, val message: String?)
+
+internal data class MessageDraftCommand(val phoneNumber: String, val message: String)
+
+internal fun parseTelegramCommand(command: String): TelegramChatCommand? {
+    val normalized = command.trim()
+    val messageMatch = Regex(
+        """(?iu)^(?:telegram(?:da|ga)?\s+)?@?([a-z0-9_]{5,32})\s+(?:ga\s+)?(?:xabar\s+)?(?:yoz(?:ib)?|xabar yubor)\s+(.+)$"""
+    ).matchEntire(normalized)
+    if (messageMatch != null) {
+        val username = messageMatch.groupValues[1]
+        if (username.startsWith("998") || username.all(Char::isDigit)) return null
+        return TelegramChatCommand(username, messageMatch.groupValues[2].trim().takeIf(String::isNotBlank))
+    }
+    val chatMatch = Regex(
+        """(?iu)^(?:telegram(?:da|ga)?\s+)?(?:@)?([a-z0-9_]{5,32})\s+(?:chat(?:ni)?\s+)?(?:och|oching)$"""
+    ).matchEntire(normalized) ?: return null
+    return TelegramChatCommand(chatMatch.groupValues[1], null)
+}
+
+internal fun parseMessageDraftCommand(command: String): MessageDraftCommand? {
+    val match = Regex(
+        """(?iu)^(?:sms|xabar)\s+([+]?[0-9][0-9()\s-]{5,20})\s+(.+)$"""
+    ).matchEntire(command.trim()) ?: return null
+    val phoneNumber = match.groupValues[1].filterIndexed { index, char ->
+        char.isDigit() || (char == '+' && index == 0)
+    }
+    if (phoneNumber.count(Char::isDigit) !in 7..15) return null
+    return MessageDraftCommand(phoneNumber, match.groupValues[2].trim())
+}
+
+internal fun parseDialCommand(command: String): String? {
+    val match = Regex("""(?iu)^(?:qongiroq|qo'ng'iroq|telefon qil|raqam ter)\s+([+]?[0-9][0-9()\s-]{5,20})$""")
+        .matchEntire(command.trim()) ?: return null
+    val phoneNumber = match.groupValues[1].filterIndexed { index, char ->
+        char.isDigit() || (char == '+' && index == 0)
+    }
+    return phoneNumber.takeIf { it.count(Char::isDigit) in 7..15 }
+}
+
+internal fun parseScrollCommand(command: String): Boolean? {
+    val normalized = normalizeAppLabel(command)
+    return when {
+        listOf("pastga scroll", "pastga aylantir", "scroll down").any(normalized::contains) -> true
+        listOf("yuqoriga scroll", "yuqoriga aylantir", "scroll up").any(normalized::contains) -> false
+        else -> null
+    }
 }
 
 internal fun parseMediaAction(command: String): MediaAction? {

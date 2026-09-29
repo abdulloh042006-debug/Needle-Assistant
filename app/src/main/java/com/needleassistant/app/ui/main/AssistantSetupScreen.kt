@@ -148,7 +148,7 @@ internal fun AssistantSetupScreen(
             )
             SetupCapabilityRow(
                 "Accessibility",
-                "Xizmat hozircha ilovalarni bosish yoki matn kiritishni bajarmaydi; buni yoqish majburiy emas.",
+                "Faqat so'ralgan yuqoriga/pastga scroll amali uchun. Boshqa ilovalarda tugma bosish yoki yozish qilinmaydi.",
                 accessibilityEnabled,
                 if (accessibilityEnabled) null else "Sozlamalar",
                 { onEnableCapability(SetupCapability.ACCESSIBILITY) }

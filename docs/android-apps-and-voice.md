@@ -16,6 +16,10 @@ Media commands include `musiqani qo'y`, `musiqani to'xtat`, `keyingi qo'shiq`, a
 
 App names are accent-insensitive and recognize common Uzbek spellings such as `Yandeks muzik`. Entering a launcher app's name by itself also opens it when there is a unique label match. The floating Needle logo can be dragged to either edge; after a short idle delay, it tucks away with a small part visible. Tap the tucked logo once to expand, then tap again to open voice command. Its edge and vertical position are saved on the device.
 
+Telegram commands can open a public username with `telegram @username chatni och` and prepare a draft with `telegram @username ga yoz Salom`. Telegram must be installed and the account must be resolvable; the user sends the prepared text inside Telegram. `sms +998 90 123 45 67 Salom` opens the default SMS app with a draft, and `qo'ng'iroq +998 90 123 45 67` opens the dialer. Needle never sends the SMS or starts the call automatically. Contact-name lookup and Telegram private-contact discovery are not implemented.
+
+When Accessibility is explicitly enabled, `pastga scroll` / `yuqoriga scroll` ask the active screen's first scrollable accessibility node to scroll. The service does not read or store screen text, tap controls, or type into another app. Some screens may not expose a scrollable node or respond to the action.
+
 ## Groq AI
 
 Set a Groq API key with the gear button in the chat. Unknown questions are sent to Groq over HTTPS using the OpenAI-compatible chat completions endpoint; device commands handled locally do not need the network. The key is stored encrypted with an Android Keystore AES-GCM key, and can be removed from the same dialog. The configured `openai/gpt-oss-120b` model is a Groq-hosted model ID; requests consume the account's Groq limits. Never commit an API key or ship one inside the APK. A mobile app cannot keep a provider key secret from a device owner or a modified client; use a backend proxy for a public production app. If a key is accidentally pasted into chat or source control, revoke it and create a replacement.

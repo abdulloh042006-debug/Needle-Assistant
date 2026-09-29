@@ -51,4 +51,34 @@ class UzbekLocaleSelectionTest {
         assertEquals(MediaAction.PREVIOUS, parseMediaAction("oldingi trek"))
         assertNull(parseMediaAction("Yandex Musicni och"))
     }
+
+    @Test
+    fun parsesTelegramUsernameAndDraftWithoutAutoSending() {
+        assertEquals(
+            TelegramChatCommand("needle_user", null),
+            parseTelegramCommand("telegram @needle_user chatni och")
+        )
+        assertEquals(
+            TelegramChatCommand("needle_user", "Salom, yaxshimisiz?"),
+            parseTelegramCommand("telegram @needle_user ga yoz Salom, yaxshimisiz?")
+        )
+        assertNull(parseTelegramCommand("telegram 998901234567 ga yoz salom"))
+    }
+
+    @Test
+    fun parsesSmsAndCallDraftsWithoutStartingCallsOrSendingMessages() {
+        assertEquals(
+            MessageDraftCommand("+998901234567", "Salom"),
+            parseMessageDraftCommand("sms +998 90 123 45 67 Salom")
+        )
+        assertEquals("+998901234567", parseDialCommand("qo'ng'iroq +998 90 123 45 67"))
+        assertNull(parseDialCommand("qo'ng'iroq yordamga"))
+    }
+
+    @Test
+    fun parsesOnlyExplicitScrollCommands() {
+        assertEquals(true, parseScrollCommand("pastga scroll"))
+        assertEquals(false, parseScrollCommand("yuqoriga aylantir"))
+        assertNull(parseScrollCommand("video och"))
+    }
 }

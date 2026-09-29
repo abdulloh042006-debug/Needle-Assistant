@@ -5,6 +5,6 @@
     <string name="overlay_notification_text">Boshqa ilovada ham Needle tugmasi ishlaydi</string>
     <string name="overlay_stop">Toxtatish</string>
     <string name="accessibility_service_label">Needle boshqaruv imkoniyati</string>
-    <string name="accessibility_service_description">Faqat foydalanuvchi yoqqanidan keyin kirish imkoniyati voqealarini oladi. Hozircha voqealar saqlanmaydi yoki yuborilmaydi.</string>
+    <string name="accessibility_service_description">Faqat foydalanuvchi aniq so‘raganda ekranni yuqoriga yoki pastga aylantirish uchun. Ekran matnlari saqlanmaydi.</string>
     <string name="notification_listener_label">Needle bildirishnoma ruxsati</string>
 </resources>
