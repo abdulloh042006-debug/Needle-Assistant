@@ -31,11 +31,16 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.core.content.ContextCompat
 import androidx.navigation3.runtime.NavKey
 import com.needleassistant.app.R
+import com.needleassistant.app.system.ChatTurn
 import com.needleassistant.app.system.DeviceController
 import com.needleassistant.app.system.FloatingAssistantService
+import com.needleassistant.app.system.GroqAssistant
+import com.needleassistant.app.system.GroqException
 import com.needleassistant.app.system.SpeechOutputState
 import kotlinx.coroutines.launch
 
@@ -47,6 +52,7 @@ fun MainScreen(
 ) {
     val context = LocalContext.current
     val deviceController = remember { DeviceController(context) }
+    val groqAssistant = remember { GroqAssistant(context) }
     val speechOutputState by deviceController.speechOutputState.collectAsState()
     val isSpeaking by deviceController.isSpeaking.collectAsState()
     val messages = remember {
@@ -60,6 +66,9 @@ fun MainScreen(
     var isListening by remember { mutableStateOf(false) }
     var showQuickActions by remember { mutableStateOf(true) }
     var floatingAssistantEnabled by remember { mutableStateOf(FloatingAssistantService.isEnabled(context)) }
+    var showGroqSettings by remember { mutableStateOf(false) }
+    var groqConfigured by remember { mutableStateOf(groqAssistant.hasApiKey) }
+    var isAiThinking by remember { mutableStateOf(false) }
 
     val overlayPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -85,11 +94,41 @@ fun MainScreen(
     }
 
     fun submitCommand(text: String) {
+        if (isAiThinking || text.isBlank()) return
         showQuickActions = false
         messages.add(Message(text, isUser = true))
         val response = deviceController.processCommand(text)
-        messages.add(Message(response, isUser = false))
-        deviceController.speak(response)
+        if (response.startsWith("Kechirasiz, bu buyruqni hali tushunmayman")) {
+            if (!groqConfigured) {
+                messages.add(
+                    Message(
+                        "Savollarga AI javob berishi uchun Groq API kalitini sozlang. Yuqoridagi ⚙ tugmasini bosing.",
+                        isUser = false
+                    )
+                )
+            } else {
+                isAiThinking = true
+                val answerIndex = messages.size
+                messages.add(Message("AI javob tayyorlamoqda...", isUser = false))
+                val conversation = messages.dropLast(1).map {
+                    ChatTurn(if (it.isUser) "user" else "assistant", it.text)
+                }
+                coroutineScope.launch {
+                    val answer = try {
+                        groqAssistant.ask(conversation)
+                    } catch (exception: GroqException) {
+                        exception.message ?: "AI javobini olishda xatolik yuz berdi."
+                    }
+                    messages[answerIndex] = Message(answer, isUser = false)
+                    isAiThinking = false
+                    deviceController.speak(answer)
+                    listState.animateScrollToItem(messages.size - 1)
+                }
+            }
+        } else {
+            messages.add(Message(response, isUser = false))
+            deviceController.speak(response)
+        }
         coroutineScope.launch {
             listState.animateScrollToItem(messages.size - 1)
         }
@@ -195,6 +234,9 @@ fun MainScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showGroqSettings = true }) {
+                        Text(if (groqConfigured) "⚙✓" else "⚙", fontSize = 20.sp)
+                    }
                     IconButton(onClick = {
                         if (floatingAssistantEnabled) {
                             context.stopService(Intent(context, FloatingAssistantService::class.java))
@@ -236,6 +278,7 @@ fun MainScreen(
         },
         bottomBar = {
             ChatBottomBar(
+                isAiThinking = isAiThinking,
                 isListening = isListening,
                 showQuickActions = showQuickActions,
                 speechOutputState = speechOutputState,
@@ -266,6 +309,81 @@ fun MainScreen(
             }
         }
     }
+
+    if (showGroqSettings) {
+        GroqSettingsDialog(
+            isConfigured = groqConfigured,
+            onDismiss = { showGroqSettings = false },
+            onSave = { apiKey ->
+                groqAssistant.saveApiKey(apiKey)
+                groqConfigured = true
+                showGroqSettings = false
+                messages.add(Message("Groq AI sozlandi. Endi istalgan savolingizni yozishingiz mumkin.", isUser = false))
+            },
+            onRemove = {
+                groqAssistant.removeApiKey()
+                groqConfigured = false
+                showGroqSettings = false
+                messages.add(Message("Groq API kaliti qurilmadan o'chirildi.", isUser = false))
+            }
+        )
+    }
+}
+
+@Composable
+private fun GroqSettingsDialog(
+    isConfigured: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+    onRemove: () -> Unit
+) {
+    var apiKey by remember { mutableStateOf("") }
+    var showKey by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Groq AI sozlamalari") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Yangi API kalitni Groq hisobingizdan kiriting. Kalit qurilmada Android Keystore bilan shifrlanadi. Groq ishlatish hisobingizdagi limitlarga bog'liq."
+                )
+                OutlinedTextField(
+                    value = apiKey,
+                    onValueChange = { apiKey = it.trim(); error = null },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text(if (isConfigured) "Yangi API kalit" else "Groq API kalit") },
+                    visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        TextButton(onClick = { showKey = !showKey }) {
+                            Text(if (showKey) "Yashir" else "Ko'rsat")
+                        }
+                    }
+                )
+                if (isConfigured) Text("Hozir kalit sozlangan.", style = MaterialTheme.typography.labelMedium)
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                try {
+                    onSave(apiKey)
+                } catch (exception: Exception) {
+                    error = exception.message ?: "Kalitni saqlab bo'lmadi."
+                }
+            }, enabled = apiKey.isNotBlank()) { Text("Saqlash") }
+        },
+        dismissButton = {
+            Row {
+                if (isConfigured) {
+                    TextButton(onClick = onRemove) { Text("O'chirish") }
+                }
+                TextButton(onClick = onDismiss) { Text("Bekor") }
+            }
+        }
+    )
 }
 
 @Composable
@@ -328,6 +446,7 @@ fun ChatBubble(message: Message) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatBottomBar(
+    isAiThinking: Boolean,
     isListening: Boolean,
     showQuickActions: Boolean,
     speechOutputState: SpeechOutputState,
@@ -384,7 +503,7 @@ fun ChatBottomBar(
                     modifier = Modifier
                         .weight(1f)
                         .padding(end = 10.dp),
-                    placeholder = { Text("Buyruq yozing...") },
+                    placeholder = { Text(if (isAiThinking) "AI javob bermoqda..." else "Buyruq yoki savol yozing...") },
                     shape = RoundedCornerShape(24.dp),
                     maxLines = 3,
                     colors = OutlinedTextFieldDefaults.colors(
@@ -396,8 +515,10 @@ fun ChatBottomBar(
                 if (text.isNotBlank()) {
                     FloatingActionButton(
                         onClick = {
-                            onSendMessage(text.trim())
-                            text = ""
+                            if (!isAiThinking) {
+                                onSendMessage(text.trim())
+                                text = ""
+                            }
                         },
                         shape = CircleShape,
                         containerColor = MaterialTheme.colorScheme.primary,

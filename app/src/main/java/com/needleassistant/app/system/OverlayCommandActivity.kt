@@ -24,6 +24,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -32,6 +33,7 @@ import androidx.core.content.ContextCompat
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import com.needleassistant.app.theme.NeedleAssistantTheme
+import kotlinx.coroutines.launch
 
 class OverlayCommandActivity : ComponentActivity() {
     companion object {
@@ -44,6 +46,7 @@ class OverlayCommandActivity : ComponentActivity() {
         setContent {
             NeedleAssistantTheme {
                 val controller = remember { DeviceController(applicationContext) }
+                val groqAssistant = remember { GroqAssistant(applicationContext) }
                 DisposableEffect(controller) {
                     onDispose { controller.shutdown() }
                 }
@@ -52,7 +55,16 @@ class OverlayCommandActivity : ComponentActivity() {
                     speechState = speechState,
                     onClose = ::finish,
                     onCommand = { command ->
-                        val response = controller.processCommand(command)
+                        val localResponse = controller.processCommand(command)
+                        val response = if (localResponse.startsWith("Kechirasiz, bu buyruqni hali tushunmayman")) {
+                            if (!groqAssistant.hasApiKey) {
+                                "AI savollariga javob olish uchun avval asosiy oynada Groq API kalitini sozlang."
+                            } else {
+                                groqAssistant.ask(listOf(ChatTurn("user", command)))
+                            }
+                        } else {
+                            localResponse
+                        }
                         controller.speak(response)
                         if (response.endsWith("ochildi ✅")) finish()
                         response
@@ -67,11 +79,27 @@ class OverlayCommandActivity : ComponentActivity() {
 private fun OverlayCommandPanel(
     speechState: SpeechOutputState,
     onClose: () -> Unit,
-    onCommand: (String) -> String
+    onCommand: suspend (String) -> String
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var command by remember { mutableStateOf("") }
     var response by remember { mutableStateOf("") }
+    var isThinking by remember { mutableStateOf(false) }
+    fun submitCommand(value: String) {
+        if (isThinking || value.isBlank()) return
+        isThinking = true
+        response = "Javob tayyorlanmoqda..."
+        coroutineScope.launch {
+            response = try {
+                onCommand(value)
+            } catch (exception: GroqException) {
+                exception.message ?: "AI javobini olishda xatolik yuz berdi."
+            }
+            isThinking = false
+        }
+    }
+
     val speechLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -80,7 +108,7 @@ private fun OverlayCommandPanel(
             ?.firstOrNull()
         if (result.resultCode == Activity.RESULT_OK && !recognized.isNullOrBlank()) {
             command = recognized
-            response = onCommand(recognized)
+            submitCommand(recognized)
         } else {
             response = "Ovoz tanilmadi. Buyruqni yozib ko'ring."
         }
@@ -149,9 +177,9 @@ private fun OverlayCommandPanel(
                 }) { Text("🎤 Ovoz") }
                 Button(
                     onClick = {
-                        if (command.isNotBlank()) response = onCommand(command)
+                        submitCommand(command)
                     },
-                    enabled = command.isNotBlank()
+                    enabled = command.isNotBlank() && !isThinking
                 ) { Text("Bajarish") }
                 TextButton(onClick = onClose) { Text("Yopish") }
             }
