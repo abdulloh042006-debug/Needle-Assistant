@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Needle Assistant</string>
+    <string name="quick_settings_tile_label">Needle yordamchi</string>
 </resources>

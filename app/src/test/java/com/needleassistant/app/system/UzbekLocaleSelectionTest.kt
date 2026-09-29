@@ -29,5 +29,14 @@ class UzbekLocaleSelectionTest {
     fun matchesAppByInstalledLauncherLabel() {
         assertTrue(isMatchingLauncherLabel("Telegram X", "Telegram"))
         assertFalse(isMatchingLauncherLabel("YouTube Music", "YouTube"))
+        assertTrue(isMatchingLauncherLabel("Google Maps", "Maps"))
+    }
+
+    @Test
+    fun extractsUzbekAndEnglishAppOpenCommands() {
+        assertEquals("telegram", extractAppNameToOpen("telegramni och"))
+        assertEquals("instagram", extractAppNameToOpen("Instagram ilovasini oching"))
+        assertEquals("google maps", extractAppNameToOpen("open Google Maps"))
+        assertNull(extractAppNameToOpen("fonarni yoq"))
     }
 }

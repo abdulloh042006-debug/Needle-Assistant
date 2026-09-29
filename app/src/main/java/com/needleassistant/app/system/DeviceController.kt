@@ -10,6 +10,7 @@ import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
+import java.text.Normalizer
 import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -178,8 +179,11 @@ class DeviceController(private val context: Context) : TextToSpeech.OnInitListen
     private fun findLauncherIntentByLabel(appName: String): Intent? {
         val packageManager = context.packageManager
         val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val matchingActivity = packageManager.queryIntentActivities(launcherIntent, 0)
-            .firstOrNull { isMatchingLauncherLabel(it.loadLabel(packageManager).toString(), appName) }
+        val matches = packageManager.queryIntentActivities(launcherIntent, 0)
+            .filter { isMatchingLauncherLabel(it.loadLabel(packageManager).toString(), appName) }
+        val matchingActivity = matches.firstOrNull {
+            normalizeAppLabel(it.loadLabel(packageManager).toString()) == normalizeAppLabel(appName)
+        } ?: matches.singleOrNull()
         return matchingActivity?.let {
             packageManager.getLaunchIntentForPackage(it.activityInfo.packageName)
         }
@@ -283,7 +287,22 @@ class DeviceController(private val context: Context) : TextToSpeech.OnInitListen
             // Yordam
             c.contains("yordam") || c.contains("buyruq") || c.contains("nima qila olasan") || c.contains("help") -> getCommandList()
 
-            else -> "Kechirasiz, bu buyruqni hali tushunmayman 🤔\n\n\"yordam\" deb yozing."
+            else -> extractAppNameToOpen(c)?.let(::openAppByLabel)
+                ?: "Kechirasiz, bu buyruqni hali tushunmayman 🤔\n\n\"yordam\" deb yozing."
+        }
+    }
+
+    private fun openAppByLabel(appName: String): String {
+        val intent = findLauncherIntentByLabel(appName)
+            ?: return "\"$appName\" nomli ilova topilmadi ❌\nIlova nomini launcherda qanday ko'rinsa shunday yozib ko'ring."
+        return try {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            "$appName ochildi ✅"
+        } catch (_: ActivityNotFoundException) {
+            "$appName ilovasini ochib bo'lmadi ❌"
+        } catch (_: SecurityException) {
+            "$appName ilovasini ochishga ruxsat berilmadi ❌"
         }
     }
 
@@ -320,8 +339,39 @@ internal fun chooseUzbekLocale(locales: Collection<Locale>): Locale? =
         .firstOrNull()
 
 internal fun isMatchingLauncherLabel(label: String, appName: String): Boolean {
-    val normalizedLabel = label.trim().lowercase(Locale.ROOT)
-    val normalizedName = appName.trim().lowercase(Locale.ROOT)
+    val normalizedLabel = normalizeAppLabel(label)
+    val normalizedName = normalizeAppLabel(appName)
     return normalizedLabel == normalizedName ||
-        (normalizedName == "telegram" && normalizedLabel == "telegram x")
+        (normalizedName == "telegram" && normalizedLabel == "telegram x") ||
+        normalizedLabel.endsWith(" $normalizedName")
 }
+
+internal fun extractAppNameToOpen(command: String): String? {
+    val words = normalizeAppLabel(command).split(' ').filter(String::isNotBlank)
+    val actions = listOf("och", "oching", "ochib", "open", "start", "run", "ishga tushir", "ishga tushiring")
+        .map { it.split(' ') }
+    val actionStart = actions
+        .mapNotNull { action ->
+            val index = words.windowed(action.size).indexOfFirst { it == action }
+            if (index >= 0) index to action.size else null
+        }
+        .minByOrNull { it.first } ?: return null
+    val (index, actionSize) = actionStart
+    val nameWords = if (index > 0) words.take(index) else words.drop(index + actionSize)
+    val ignoredWords = setOf("iltimos", "menga", "ilova", "ilovani", "ilovasini", "app", "appni", "dastur", "dasturni")
+    val appWords = nameWords
+        .filterNot { it in ignoredWords || it == "ber" }
+        .toMutableList()
+    val lastWord = appWords.lastOrNull() ?: return null
+    appWords[appWords.lastIndex] = listOf("ni", "ga", "da").firstOrNull {
+        lastWord.length > it.length + 2 && lastWord.endsWith(it)
+    }?.let(lastWord::removeSuffix) ?: lastWord
+    return appWords.joinToString(" ").takeIf(String::isNotBlank)
+}
+
+private fun normalizeAppLabel(value: String): String =
+    Normalizer.normalize(value, Normalizer.Form.NFD)
+        .replace(Regex("\\p{Mn}+"), "")
+        .lowercase(Locale.ROOT)
+        .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
+        .trim()
