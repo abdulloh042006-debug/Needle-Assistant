@@ -155,7 +155,7 @@ internal fun AssistantSetupScreen(
             )
             SetupCapabilityRow(
                 "Notification Access",
-                "Bildirishnoma/media boshqaruvi hali ulanmagan. Faqat kelajakdagi funksiyalar uchun ixtiyoriy.",
+                "Faol media seansini topish va musiqa/video ijrosini boshqarish uchun. Yoqish ixtiyoriy.",
                 notificationAccessEnabled,
                 if (notificationAccessEnabled) null else "Sozlamalar",
                 { onEnableCapability(SetupCapability.NOTIFICATION_ACCESS) }

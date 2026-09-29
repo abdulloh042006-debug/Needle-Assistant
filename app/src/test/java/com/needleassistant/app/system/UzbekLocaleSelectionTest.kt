@@ -39,4 +39,14 @@ class UzbekLocaleSelectionTest {
         assertEquals("google maps", extractAppNameToOpen("open Google Maps"))
         assertNull(extractAppNameToOpen("fonarni yoq"))
     }
+
+    @Test
+    fun parsesUzbekMediaCommands() {
+        assertEquals(MediaAction.PLAY, parseMediaAction("musiqani qo'y"))
+        assertEquals(MediaAction.PLAY, parseMediaAction("qo'shiqni qo'y"))
+        assertEquals(MediaAction.PAUSE, parseMediaAction("musiqani to'xtat"))
+        assertEquals(MediaAction.NEXT, parseMediaAction("keyingi qo'shiq"))
+        assertEquals(MediaAction.PREVIOUS, parseMediaAction("oldingi trek"))
+        assertNull(parseMediaAction("Yandex Musicni och"))
+    }
 }

@@ -5,6 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.hardware.camera2.CameraManager
 import android.media.AudioManager
+import android.media.session.MediaController
+import android.media.session.MediaSessionManager
+import android.media.session.PlaybackState
 import android.os.BatteryManager
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
@@ -191,6 +194,7 @@ class DeviceController(private val context: Context) : TextToSpeech.OnInitListen
 
     fun processCommand(command: String): String {
         val c = command.lowercase(Locale.getDefault()).trim()
+        parseMediaAction(c)?.let { return controlMedia(it) }
         return when {
             // Fonar
             (c.contains("fonar") || c.contains("chiroq") || c.contains("flashlight")) &&
@@ -292,6 +296,38 @@ class DeviceController(private val context: Context) : TextToSpeech.OnInitListen
         }
     }
 
+    private fun controlMedia(action: MediaAction): String {
+        val sessionManager = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
+        val sessions = try {
+            sessionManager.getActiveSessions(NeedleNotificationListenerService.componentName(context))
+        } catch (_: SecurityException) {
+            return "Media boshqarish uchun Sozlamalar > Notification Access bo'limida Needle ruxsatini yoqing."
+        } catch (_: IllegalStateException) {
+            return "Media seanslarni o'qib bo'lmadi. Notification Access ruxsatini tekshiring."
+        }
+
+        val supportedSession = sessions.firstOrNull { controller -> controller.supports(action) }
+            ?: return "Faol media topilmadi yoki ochiq ilova bu amalni qo'llamaydi. Musiqa/video ilovasini ishga tushiring va Notification Access'ni yoqing."
+        return try {
+            when (action) {
+                MediaAction.PLAY -> supportedSession.transportControls.play()
+                MediaAction.PAUSE -> supportedSession.transportControls.pause()
+                MediaAction.NEXT -> supportedSession.transportControls.skipToNext()
+                MediaAction.PREVIOUS -> supportedSession.transportControls.skipToPrevious()
+            }
+            when (action) {
+                MediaAction.PLAY -> "Media ijrosi boshlandi ▶️"
+                MediaAction.PAUSE -> "Media pauza qilindi ⏸️"
+                MediaAction.NEXT -> "Keyingi trekka o'tildi ⏭️"
+                MediaAction.PREVIOUS -> "Oldingi trekka o'tildi ⏮️"
+            }
+        } catch (_: SecurityException) {
+            "Media ilovasi bu amalni bajarishga ruxsat bermadi."
+        } catch (_: IllegalStateException) {
+            "Media ilovasi hozir boshqaruv buyruqlarini qabul qilmayapti."
+        }
+    }
+
     private fun openAppByLabel(appName: String): String {
         val intent = findLauncherIntentByLabel(appName)
             ?: return "\"$appName\" nomli ilova topilmadi ❌\nIlova nomini launcherda qanday ko'rinsa shunday yozib ko'ring."
@@ -315,6 +351,8 @@ class DeviceController(private val context: Context) : TextToSpeech.OnInitListen
 📶 "wifi ochiq"
 📡 "bluetoothni och"
 🔊 "ovozni ko'tar" / "ovozni past qil"
+🎵 "musiqani qo'y" / "musiqani to'xtat"
+⏭ "keyingi qo'shiq" / "oldingi trek"
 📷 "kamerani och"
 🧮 "kalkulyatorni och"
 📱 "telegramni och"
@@ -330,6 +368,35 @@ enum class SpeechOutputState {
     INITIALIZING,
     READY,
     UNAVAILABLE
+}
+
+internal enum class MediaAction {
+    PLAY,
+    PAUSE,
+    NEXT,
+    PREVIOUS
+}
+
+internal fun parseMediaAction(command: String): MediaAction? {
+    val normalized = normalizeAppLabel(command)
+    return when {
+        listOf("keyingi", "navbatdagi", "next trek", "next qoshiq").any(normalized::contains) ->
+            MediaAction.NEXT
+        listOf("oldingi", "avvalgi", "previous trek", "previous qoshiq").any(normalized::contains) ->
+            MediaAction.PREVIOUS
+        listOf("pauza", "pause", "toxtat", "stop", "musiqani ochir", "qoshiqni toxtat").any(normalized::contains) ->
+            MediaAction.PAUSE
+        listOf(
+            "musiqa qoy",
+            "musiqani qoy",
+            "qoshiq qoy",
+            "qoshiqni qoy",
+            "play",
+            "davom et",
+            "ijroni davom"
+        ).any(normalized::contains) -> MediaAction.PLAY
+        else -> null
+    }
 }
 
 internal fun chooseUzbekLocale(locales: Collection<Locale>): Locale? =
@@ -372,6 +439,20 @@ internal fun extractAppNameToOpen(command: String): String? {
 private fun normalizeAppLabel(value: String): String =
     Normalizer.normalize(value, Normalizer.Form.NFD)
         .replace(Regex("\\p{Mn}+"), "")
+        .replace("'", "")
+        .replace("’", "")
+        .replace("‘", "")
         .lowercase(Locale.ROOT)
         .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
         .trim()
+
+private fun MediaController.supports(action: MediaAction): Boolean {
+    val availableActions = playbackState?.actions ?: 0L
+    val requiredAction = when (action) {
+        MediaAction.PLAY -> PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PLAY_PAUSE
+        MediaAction.PAUSE -> PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE
+        MediaAction.NEXT -> PlaybackState.ACTION_SKIP_TO_NEXT
+        MediaAction.PREVIOUS -> PlaybackState.ACTION_SKIP_TO_PREVIOUS
+    }
+    return availableActions and requiredAction != 0L
+}
