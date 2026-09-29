@@ -291,8 +291,12 @@ class DeviceController(private val context: Context) : TextToSpeech.OnInitListen
             // Yordam
             c.contains("yordam") || c.contains("buyruq") || c.contains("nima qila olasan") || c.contains("help") -> getCommandList()
 
-            else -> extractAppNameToOpen(c)?.let(::openAppByLabel)
-                ?: "Kechirasiz, bu buyruqni hali tushunmayman 🤔\n\n\"yordam\" deb yozing."
+            else -> {
+                val requestedApp = extractAppNameToOpen(c)
+                    ?: c.takeIf { findLauncherIntentByLabel(it) != null }
+                requestedApp?.let(::openAppByLabel)
+                    ?: "Kechirasiz, bu buyruqni hali tushunmayman 🤔\n\n\"yordam\" deb yozing."
+            }
         }
     }
 
@@ -436,8 +440,8 @@ internal fun extractAppNameToOpen(command: String): String? {
     return appWords.joinToString(" ").takeIf(String::isNotBlank)
 }
 
-private fun normalizeAppLabel(value: String): String =
-    Normalizer.normalize(value, Normalizer.Form.NFD)
+private fun normalizeAppLabel(value: String): String {
+    val normalized = Normalizer.normalize(value, Normalizer.Form.NFD)
         .replace(Regex("\\p{Mn}+"), "")
         .replace("'", "")
         .replace("’", "")
@@ -445,6 +449,26 @@ private fun normalizeAppLabel(value: String): String =
         .lowercase(Locale.ROOT)
         .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
         .trim()
+    val speechAliases = mapOf(
+        "yandex aymi" to "yandex music",
+        "yandeks aymi" to "yandex music",
+        "yandex ime" to "yandex music",
+        "yandeks ime" to "yandex music"
+    )
+    speechAliases[normalized]?.let { return it }
+    return normalized
+        .split(' ')
+        .filter(String::isNotBlank)
+        .joinToString(" ") { word ->
+            when (word) {
+                "muzik", "musiqa", "musiqi", "music", "myuzik" -> "music"
+                "yandeks" -> "yandex"
+                "aymi", "aimi", "ime" -> "music"
+                else -> word
+            }
+        }
+        .trim()
+}
 
 private fun MediaController.supports(action: MediaAction): Boolean {
     val availableActions = playbackState?.actions ?: 0L

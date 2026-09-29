@@ -30,6 +30,8 @@ class UzbekLocaleSelectionTest {
         assertTrue(isMatchingLauncherLabel("Telegram X", "Telegram"))
         assertFalse(isMatchingLauncherLabel("YouTube Music", "YouTube"))
         assertTrue(isMatchingLauncherLabel("Google Maps", "Maps"))
+        assertTrue(isMatchingLauncherLabel("Yandex Music", "Yandeks muzik"))
+        assertTrue(isMatchingLauncherLabel("Yandex Music", "Yandeks aymi"))
     }
 
     @Test

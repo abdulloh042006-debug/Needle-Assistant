@@ -462,9 +462,13 @@ fun ChatBubble(message: Message) {
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.primaryContainer
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text("N", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
-                }
+                Image(
+                    painter = painterResource(id = R.drawable.logo),
+                    contentDescription = "Needle logosi",
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape)
+                )
             }
         }
         Column(horizontalAlignment = if (message.isUser) Alignment.End else Alignment.Start) {
