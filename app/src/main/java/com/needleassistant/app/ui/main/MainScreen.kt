@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.speech.RecognizerIntent
 import android.os.Build
+import android.app.role.RoleManager
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -20,6 +21,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,6 +36,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation3.runtime.NavKey
 import com.needleassistant.app.R
 import com.needleassistant.app.system.ChatTurn
@@ -69,6 +74,25 @@ fun MainScreen(
     var showGroqSettings by remember { mutableStateOf(false) }
     var groqConfigured by remember { mutableStateOf(groqAssistant.hasApiKey) }
     var isAiThinking by remember { mutableStateOf(false) }
+    var showAssistantSetup by remember {
+        mutableStateOf(!context.getSharedPreferences("assistant_setup", 0).getBoolean("completed", false))
+    }
+    var capabilityRefresh by remember { mutableIntStateOf(0) }
+
+    val capabilityLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { capabilityRefresh++ }
+    val setupMicrophoneLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { capabilityRefresh++ }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) capabilityRefresh++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val overlayPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -91,6 +115,30 @@ fun MainScreen(
 
     DisposableEffect(deviceController) {
         onDispose { deviceController.shutdown() }
+    }
+
+    if (showAssistantSetup) {
+        AssistantSetupScreen(
+            capabilityRefresh = capabilityRefresh,
+            onEnableCapability = { capability ->
+                when (capability) {
+                    SetupCapability.MICROPHONE -> setupMicrophoneLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    SetupCapability.OVERLAY -> capabilityLauncher.launch(
+                        Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
+                    )
+                    SetupCapability.ACCESSIBILITY -> capabilityLauncher.launch(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    SetupCapability.NOTIFICATION_ACCESS -> capabilityLauncher.launch(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                    SetupCapability.DEFAULT_ASSISTANT -> requestAssistantRole(context, capabilityLauncher, RoleManager.ROLE_ASSISTANT)
+                    SetupCapability.DEFAULT_DIALER -> requestAssistantRole(context, capabilityLauncher, RoleManager.ROLE_DIALER)
+                    SetupCapability.DEFAULT_SMS -> requestAssistantRole(context, capabilityLauncher, RoleManager.ROLE_SMS)
+                }
+            },
+            onComplete = {
+                context.getSharedPreferences("assistant_setup", 0).edit().putBoolean("completed", true).apply()
+                showAssistantSetup = false
+            }
+        )
+        return
     }
 
     fun submitCommand(text: String) {
@@ -234,9 +282,13 @@ fun MainScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showAssistantSetup = true }) {
+                        Text("☷", fontSize = 20.sp)
+                    }
                     IconButton(onClick = { showGroqSettings = true }) {
                         Text(if (groqConfigured) "⚙✓" else "⚙", fontSize = 20.sp)
                     }
+
                     IconButton(onClick = {
                         if (floatingAssistantEnabled) {
                             context.stopService(Intent(context, FloatingAssistantService::class.java))
