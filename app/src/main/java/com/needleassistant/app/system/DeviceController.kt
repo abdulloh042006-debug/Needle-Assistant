@@ -1,5 +1,6 @@
 package com.needleassistant.app.system
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.hardware.camera2.CameraManager
@@ -7,34 +8,115 @@ import android.media.AudioManager
 import android.os.BatteryManager
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import android.speech.tts.Voice
+import java.text.Normalizer
 import java.util.Locale
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class DeviceController(private val context: Context) : TextToSpeech.OnInitListener {
 
     private var tts: TextToSpeech? = null
-    var isSpeaking = false
-        private set
+    private val _speechOutputState = MutableStateFlow(SpeechOutputState.INITIALIZING)
+    val speechOutputState: StateFlow<SpeechOutputState> = _speechOutputState.asStateFlow()
+    private val _isSpeaking = MutableStateFlow(false)
+    val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
+    private var pendingSpeech: String? = null
 
     init {
         tts = TextToSpeech(context, this)
     }
 
     override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) {
-            val uzbek = Locale("uz", "UZ")
-            val result = tts?.setLanguage(uzbek)
-            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                tts?.setLanguage(Locale("ru"))
+        val engine = tts
+        if (status != TextToSpeech.SUCCESS || engine == null) {
+            _speechOutputState.value = SpeechOutputState.UNAVAILABLE
+            pendingSpeech = null
+            return
+        }
+
+        val uzbekVoices = engine.voices.orEmpty()
+            .filter { it.locale.language.equals("uz", ignoreCase = true) }
+            .sortedWith(
+                compareBy<Voice> { it.isNetworkConnectionRequired }
+                    .thenByDescending { it.locale.country.equals("UZ", ignoreCase = true) }
+            )
+        val selectedVoice = uzbekVoices.firstOrNull()
+        val languageResult = if (selectedVoice != null) {
+            engine.voice = selectedVoice
+            TextToSpeech.LANG_AVAILABLE
+        } else {
+            val uzbekLocale = chooseUzbekLocale(engine.availableLanguages.orEmpty())
+            if (uzbekLocale == null) TextToSpeech.LANG_NOT_SUPPORTED else engine.setLanguage(uzbekLocale)
+        }
+
+        if (languageResult < TextToSpeech.LANG_AVAILABLE) {
+            _speechOutputState.value = SpeechOutputState.UNAVAILABLE
+            pendingSpeech = null
+            return
+        }
+
+        engine.setSpeechRate(0.95f)
+        engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {
+                _isSpeaking.value = true
             }
+
+            @Suppress("OVERRIDE_DEPRECATION")
+            override fun onDone(utteranceId: String?) {
+                _isSpeaking.value = false
+            }
+
+            @Suppress("OVERRIDE_DEPRECATION")
+            override fun onError(utteranceId: String?) {
+                _isSpeaking.value = false
+            }
+        })
+        _speechOutputState.value = SpeechOutputState.READY
+        pendingSpeech?.let {
+            pendingSpeech = null
+            speak(it)
         }
     }
 
-    fun speak(text: String) {
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "needle_tts")
+    fun speak(text: String): Boolean {
+        if (_speechOutputState.value == SpeechOutputState.INITIALIZING) {
+            pendingSpeech = text
+            return true
+        }
+        if (_speechOutputState.value != SpeechOutputState.READY) return false
+        val result = tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "needle_tts")
+        if (result != TextToSpeech.SUCCESS) {
+            _isSpeaking.value = false
+            return false
+        }
+        return true
     }
 
     fun stopSpeaking() {
         tts?.stop()
+        _isSpeaking.value = false
+    }
+
+    fun installUzbekVoiceDataIntent(): Intent =
+        Intent(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA)
+
+    fun refreshSpeechOutput() {
+        _speechOutputState.value = SpeechOutputState.INITIALIZING
+        _isSpeaking.value = false
+        pendingSpeech = null
+        tts?.shutdown()
+        tts = TextToSpeech(context, this)
+    }
+
+    fun shutdown() {
+        tts?.stop()
+        tts?.shutdown()
+        tts = null
+        _isSpeaking.value = false
+        pendingSpeech = null
     }
 
     private fun flashlight(isOn: Boolean): String {
@@ -74,16 +156,37 @@ class DeviceController(private val context: Context) : TextToSpeech.OnInitListen
 
     // Tries multiple package names for the same app
     private fun openApp(packages: List<String>, appName: String): String {
-        for (pkg in packages) {
-            val intent = context.packageManager.getLaunchIntentForPackage(pkg)
-            if (intent != null) {
+        var launchFailed = false
+        val packageManager = context.packageManager
+        val launchIntents = packages.mapNotNull(packageManager::getLaunchIntentForPackage) +
+            listOfNotNull(findLauncherIntentByLabel(appName))
+        for (intent in launchIntents) {
+            try {
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
                 return "$appName ochildi ✅"
+            } catch (_: ActivityNotFoundException) {
+                launchFailed = true
+            } catch (_: SecurityException) {
+                launchFailed = true
             }
         }
-        // Last resort: try to open via app name search in Play Store
+        if (launchFailed) return "$appName ilovasini ochib bo'lmadi ❌"
+
         return "$appName topilmadi ❌\n(Ilova telefoningizda o'rnatilmagan bo'lishi mumkin)"
+    }
+
+    private fun findLauncherIntentByLabel(appName: String): Intent? {
+        val packageManager = context.packageManager
+        val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val matches = packageManager.queryIntentActivities(launcherIntent, 0)
+            .filter { isMatchingLauncherLabel(it.loadLabel(packageManager).toString(), appName) }
+        val matchingActivity = matches.firstOrNull {
+            normalizeAppLabel(it.loadLabel(packageManager).toString()) == normalizeAppLabel(appName)
+        } ?: matches.singleOrNull()
+        return matchingActivity?.let {
+            packageManager.getLaunchIntentForPackage(it.activityInfo.packageName)
+        }
     }
 
     fun processCommand(command: String): String {
@@ -184,7 +287,22 @@ class DeviceController(private val context: Context) : TextToSpeech.OnInitListen
             // Yordam
             c.contains("yordam") || c.contains("buyruq") || c.contains("nima qila olasan") || c.contains("help") -> getCommandList()
 
-            else -> "Kechirasiz, bu buyruqni hali tushunmayman 🤔\n\n\"yordam\" deb yozing."
+            else -> extractAppNameToOpen(c)?.let(::openAppByLabel)
+                ?: "Kechirasiz, bu buyruqni hali tushunmayman 🤔\n\n\"yordam\" deb yozing."
+        }
+    }
+
+    private fun openAppByLabel(appName: String): String {
+        val intent = findLauncherIntentByLabel(appName)
+            ?: return "\"$appName\" nomli ilova topilmadi ❌\nIlova nomini launcherda qanday ko'rinsa shunday yozib ko'ring."
+        return try {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            "$appName ochildi ✅"
+        } catch (_: ActivityNotFoundException) {
+            "$appName ilovasini ochib bo'lmadi ❌"
+        } catch (_: SecurityException) {
+            "$appName ilovasini ochishga ruxsat berilmadi ❌"
         }
     }
 
@@ -207,3 +325,53 @@ class DeviceController(private val context: Context) : TextToSpeech.OnInitListen
         """.trimIndent()
     }
 }
+
+enum class SpeechOutputState {
+    INITIALIZING,
+    READY,
+    UNAVAILABLE
+}
+
+internal fun chooseUzbekLocale(locales: Collection<Locale>): Locale? =
+    locales
+        .filter { it.language.equals("uz", ignoreCase = true) }
+        .sortedByDescending { it.country.equals("UZ", ignoreCase = true) }
+        .firstOrNull()
+
+internal fun isMatchingLauncherLabel(label: String, appName: String): Boolean {
+    val normalizedLabel = normalizeAppLabel(label)
+    val normalizedName = normalizeAppLabel(appName)
+    return normalizedLabel == normalizedName ||
+        (normalizedName == "telegram" && normalizedLabel == "telegram x") ||
+        normalizedLabel.endsWith(" $normalizedName")
+}
+
+internal fun extractAppNameToOpen(command: String): String? {
+    val words = normalizeAppLabel(command).split(' ').filter(String::isNotBlank)
+    val actions = listOf("och", "oching", "ochib", "open", "start", "run", "ishga tushir", "ishga tushiring")
+        .map { it.split(' ') }
+    val actionStart = actions
+        .mapNotNull { action ->
+            val index = words.windowed(action.size).indexOfFirst { it == action }
+            if (index >= 0) index to action.size else null
+        }
+        .minByOrNull { it.first } ?: return null
+    val (index, actionSize) = actionStart
+    val nameWords = if (index > 0) words.take(index) else words.drop(index + actionSize)
+    val ignoredWords = setOf("iltimos", "menga", "ilova", "ilovani", "ilovasini", "app", "appni", "dastur", "dasturni")
+    val appWords = nameWords
+        .filterNot { it in ignoredWords || it == "ber" }
+        .toMutableList()
+    val lastWord = appWords.lastOrNull() ?: return null
+    appWords[appWords.lastIndex] = listOf("ni", "ga", "da").firstOrNull {
+        lastWord.length > it.length + 2 && lastWord.endsWith(it)
+    }?.let(lastWord::removeSuffix) ?: lastWord
+    return appWords.joinToString(" ").takeIf(String::isNotBlank)
+}
+
+private fun normalizeAppLabel(value: String): String =
+    Normalizer.normalize(value, Normalizer.Form.NFD)
+        .replace(Regex("\\p{Mn}+"), "")
+        .lowercase(Locale.ROOT)
+        .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
+        .trim()

@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">Needle Assistant</string>
+    <string name="quick_settings_tile_label">Needle yordamchi</string>
+    <string name="overlay_notification_channel">Suzuvchi yordamchi</string>
+    <string name="overlay_notification_text">Boshqa ilovada ham Needle tugmasi ishlaydi</string>
+    <string name="overlay_stop">Toxtatish</string>
 </resources>
