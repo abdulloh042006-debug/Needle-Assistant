@@ -112,8 +112,8 @@ class DeepSeekAssistant {
         if (json != null) {
             when (json.optString("type").lowercase()) {
                 "command" -> {
-                    val command = json.optString("command").trim()
-                    if (command.isNotBlank() && isSupportedCommandShape(command)) {
+                    val command = normalizeCommand(json.optString("command"))
+                    if (command != null && isSupportedCommandShape(command)) {
                         return AssistantDecision(command = command)
                     }
                     return AssistantDecision(answer = "Bu amal Needle tomonidan xavfsiz bajariladigan buyruqlar qatoriga kirmaydi. Boshqa usulda so'rab ko'ring.")
@@ -127,6 +127,57 @@ class DeepSeekAssistant {
         return AssistantDecision(answer = response.trim().ifBlank {
             "DeepSeek tushunarli javob qaytarmadi. Qayta urinib ko'ring."
         })
+    }
+
+    private fun normalizeCommand(rawCommand: String): String? {
+        val value = rawCommand.trim().lowercase()
+        val aliases = mapOf(
+            "flashlight_on" to "fonarni yoq",
+            "turn_on_flashlight" to "fonarni yoq",
+            "flashlight_off" to "fonarni o'chir",
+            "turn_off_flashlight" to "fonarni o'chir",
+            "get_battery" to "batareya necha foiz",
+            "battery_status" to "batareya necha foiz",
+            "open_wifi_settings" to "wifi sozlamalarini och",
+            "open_bluetooth_settings" to "bluetooth sozlamalarini och",
+            "volume_up" to "ovozni ko'tar",
+            "volume_down" to "ovozni past qil",
+            "media_play" to "musiqani qo'y",
+            "play_music" to "musiqani qo'y",
+            "media_pause" to "musiqani to'xtat",
+            "pause_music" to "musiqani to'xtat",
+            "media_next" to "keyingi qo'shiq",
+            "next_track" to "keyingi qo'shiq",
+            "media_previous" to "oldingi trek",
+            "previous_track" to "oldingi trek",
+            "scroll_down" to "pastga scroll",
+            "scroll_up" to "yuqoriga scroll",
+            "open_camera" to "kamerani och",
+            "open_calculator" to "kalkulyatorni och",
+            "open_telegram" to "telegramni och",
+            "open_youtube" to "youtubeni och",
+            "open_instagram" to "instagramni och",
+            "open_settings" to "sozlamalarni och",
+            "open_browser" to "brauzerni och"
+        )
+        aliases[value]?.let { return it }
+
+        val appMatch = Regex("""(?i)^(?:open_app|open app|ilovani och)\\s*[:=(]?\\s*["']?(.+?)["']?\\)?$""")
+            .matchEntire(rawCommand.trim())
+        if (appMatch != null) return "${appMatch.groupValues[1].trim()} ilovasini och"
+
+        val english = when {
+            value.contains("turn on") && (value.contains("flashlight") || value.contains("torch")) -> "fonarni yoq"
+            value.contains("turn off") && (value.contains("flashlight") || value.contains("torch")) -> "fonarni o'chir"
+            value.contains("battery") && (value.contains("level") || value.contains("charge")) -> "batareya necha foiz"
+            value.contains("open") && value.contains("camera") -> "kamerani och"
+            value.contains("open") && value.contains("calculator") -> "kalkulyatorni och"
+            value.contains("open") && value.contains("telegram") -> "telegramni och"
+            value.contains("open") && value.contains("youtube") -> "youtubeni och"
+            value.contains("open") && value.contains("instagram") -> "instagramni och"
+            else -> null
+        }
+        return english ?: rawCommand.trim().takeIf(String::isNotBlank)
     }
 
     /**
