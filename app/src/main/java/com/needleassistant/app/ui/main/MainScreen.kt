@@ -82,6 +82,9 @@ fun MainScreen(
     val setupMicrophoneLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { capabilityRefresh++ }
+    val contactsCallSmsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { capabilityRefresh++ }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -120,6 +123,7 @@ fun MainScreen(
             onEnableCapability = { capability ->
                 when (capability) {
                     SetupCapability.MICROPHONE -> setupMicrophoneLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    SetupCapability.CONTACTS_CALL_SMS -> contactsCallSmsLauncher.launch(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE, Manifest.permission.SEND_SMS))
                     SetupCapability.OVERLAY -> capabilityLauncher.launch(
                         Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
                     )
