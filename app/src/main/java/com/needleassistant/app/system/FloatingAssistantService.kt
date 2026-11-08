@@ -251,7 +251,7 @@ class FloatingAssistantService : Service() {
         val input = EditText(this).apply {
             hint = "Buyruq: pastga aylantir..."
             textSize = 15f
-            singleLine = true
+            setSingleLine(true)
             imeOptions = EditorInfo.IME_ACTION_DONE
             setTextColor(0xFFFFFFFF.toInt())
             setHintTextColor(0xFFB7C0CF.toInt())
