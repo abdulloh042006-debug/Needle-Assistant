@@ -2,7 +2,6 @@ package com.needleassistant.app.system
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -150,8 +149,8 @@ class DeepSeekAssistant {
         private const val ENDPOINT =
             "https://bymuslim.shop/API/deepseek-v4.1-flash-1017-fast.php"
         private const val TIMEOUT_MILLIS = 30_000
-        private const val MAX_CONTEXT_TURNS = 10
-        private const val MAX_TURN_CHARS = 2_000
+        private const val MAX_CONTEXT_TURNS = 6
+        private const val MAX_TURN_CHARS = 350
         private const val MAX_RESPONSE_CHARS = 100_000
 
         private val SYSTEM_INSTRUCTIONS = """
