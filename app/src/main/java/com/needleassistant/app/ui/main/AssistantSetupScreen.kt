@@ -169,24 +169,22 @@ internal fun AssistantSetupScreen(
                 { onEnableCapability(SetupCapability.DEFAULT_ASSISTANT) }
             )
             SetupCapabilityRow(
-                "Default Dialer / Telecom",
-                if (dialerRoleHeld) "Needle standart telefon ilovasi."
-                else "InCallService va dialer ekrani hali yo'q; qo'ng'iroqni qabul/rad etish ishlamaydi.",
-                dialerRoleHeld,
-                if (dialerRoleReady && !dialerRoleHeld) "Rolni so'rash" else null,
-                { onEnableCapability(SetupCapability.DEFAULT_DIALER) }
+                "Telefon qilish",
+                "Needle Android Telefon ilovasida raqam terish oynasini ochadi. Qo'ng'iroqni o'zingiz boshlaysiz; Default Dialer roli kerak emas.",
+                true,
+                null,
+                {}
             )
             SetupCapabilityRow(
-                "Default SMS",
-                if (smsRoleHeld) "Needle standart SMS ilovasi."
-                else "SMS ilovasi/provider to'liq amalga oshirilmagan; SMS yuborish hozircha ishlamaydi.",
-                smsRoleHeld,
-                if (smsRoleReady && !smsRoleHeld) "Rolni so'rash" else null,
-                { onEnableCapability(SetupCapability.DEFAULT_SMS) }
+                "SMS yozish",
+                "Needle standart SMS ilovangizda raqam va xabar matnini tayyorlaydi. Yuborishni o'zingiz tasdiqlaysiz; Default SMS roli kerak emas.",
+                true,
+                null,
+                {}
             )
             HorizontalDivider()
             Text(
-                "Contacts, Call va SMS permissions faqat tegishli amallar amalga oshirilganda so'raladi. Device Admin bu vazifalar uchun kerak emas va so'ralmaydi. Device Owner oddiy permission emas: enterprise provisioning, ko'pincha factory reset talab qiladi.",
+                "SMS yuborish yoki qo'ng'iroqni avtomatik boshlash hozircha mavjud emas. Shu sababli SEND_SMS, CALL_PHONE, Contacts, Default SMS va Default Dialer ruxsatlari so'ralmaydi. Device Admin/Owner ham bu vazifalar uchun kerak emas.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
