@@ -69,6 +69,7 @@ class FloatingAssistantService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var isTucked = false
     private var isDragging = false
+    private var overlayHiddenForGesture = false
     private var downRawX = 0f
     private var downRawY = 0f
     private var downX = 0
@@ -77,6 +78,7 @@ class FloatingAssistantService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        activeInstance = this
         createNotificationChannel()
         startAsForegroundService()
         deviceController = DeviceController(applicationContext)
@@ -307,7 +309,11 @@ class FloatingAssistantService : Service() {
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ))
 
-        val panelWidth = min(dp(PANEL_WIDTH_DP), screenWidth() - dp(24)).coerceAtLeast(dp(240))
+        // Leave a clear strip beside the panel so the floating N button stays tappable.
+        val panelWidth = min(
+            dp(PANEL_WIDTH_DP),
+            screenWidth() - dp(BUBBLE_SIZE_DP + 24)
+        ).coerceAtLeast(dp(240))
         val onRight = getPreferences().getBoolean(KEY_RIGHT, params.x + params.width / 2 >= screenWidth() / 2)
         val overlayParams = WindowManager.LayoutParams(
             panelWidth,
@@ -317,7 +323,7 @@ class FloatingAssistantService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.LEFT
-            x = if (onRight) max(dp(12), screenWidth() - panelWidth - dp(12)) else dp(12)
+            x = if (onRight) dp(12) else max(dp(12), screenWidth() - panelWidth - dp(12))
             y = (params.y - dp(90)).coerceIn(dp(24), max(dp(24), screenHeight() - dp(300)))
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
                 WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
@@ -492,6 +498,34 @@ class FloatingAssistantService : Service() {
         speechRecognizer = null
     }
 
+
+    private fun hideOverlaysForScrollGesture() {
+        if (overlayHiddenForGesture) return
+        overlayHiddenForGesture = true
+        panel?.let { view -> runCatching { windowManager?.removeView(view) } }
+        bubble?.let { view -> runCatching { windowManager?.removeView(view) } }
+    }
+
+    private fun restoreOverlaysAfterScrollGesture() {
+        if (!overlayHiddenForGesture) return
+        overlayHiddenForGesture = false
+        val manager = windowManager ?: return
+        try {
+            bubble?.let { view ->
+                if (!view.isAttachedToWindow) {
+                    bubbleParams?.let { manager.addView(view, it) }
+                }
+            }
+            panel?.let { view ->
+                if (!view.isAttachedToWindow) {
+                    panelParams?.let { manager.addView(view, it) }
+                }
+            }
+        } catch (_: Exception) {
+            // Keep the foreground app usable even if Android rejects restoration.
+        }
+    }
+
     private fun snapToNearestEdge() {
         val params = bubbleParams ?: return
         val right = params.x + dp(BUBBLE_SIZE_DP / 2) >= screenWidth() / 2
@@ -588,6 +622,7 @@ class FloatingAssistantService : Service() {
         deviceController = null
         serviceScope.cancel()
         getPreferences().edit().putBoolean(KEY_ENABLED, false).apply()
+        if (activeInstance === this) activeInstance = null
         super.onDestroy()
     }
 
@@ -605,6 +640,17 @@ class FloatingAssistantService : Service() {
         private const val KEY_RIGHT = "right"
         private const val CHANNEL_ID = "floating_assistant"
         private const val NOTIFICATION_ID = 7001
+        @Volatile
+        private var activeInstance: FloatingAssistantService? = null
+
+        fun hideOverlayForAccessibilityGesture() {
+            activeInstance?.hideOverlaysForScrollGesture()
+        }
+
+        fun restoreOverlayAfterAccessibilityGesture() {
+            activeInstance?.restoreOverlaysAfterScrollGesture()
+        }
+
         private const val TUCK_DELAY_MILLIS = 4_000L
         private const val BUBBLE_SIZE_DP = 56
         private const val PANEL_WIDTH_DP = 320
