@@ -97,7 +97,24 @@ class NeedleAccessibilityService : AccessibilityService() {
             val gesture = GestureDescription.Builder()
                 .addStroke(GestureDescription.StrokeDescription(path, 0L, SCROLL_GESTURE_MILLIS))
                 .build()
-            return runCatching { dispatchGesture(gesture, null, null) }.getOrDefault(false)
+
+            // The panel is a touchable overlay. Hide it while the system injects
+            // the swipe so the gesture reaches the app underneath, then restore it.
+            FloatingAssistantService.hideOverlayForAccessibilityGesture()
+            val callback = object : AccessibilityService.GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription) {
+                    FloatingAssistantService.restoreOverlayAfterAccessibilityGesture()
+                }
+
+                override fun onCancelled(gestureDescription: GestureDescription) {
+                    FloatingAssistantService.restoreOverlayAfterAccessibilityGesture()
+                }
+            }
+            val accepted = runCatching {
+                dispatchGesture(gesture, callback, null)
+            }.getOrDefault(false)
+            if (!accepted) FloatingAssistantService.restoreOverlayAfterAccessibilityGesture()
+            return accepted
         }
 
         private const val MAX_SCROLL_TREE_DEPTH = 40
