@@ -94,7 +94,7 @@ private fun OverlayCommandPanel(
         coroutineScope.launch {
             response = try {
                 onCommand(value)
-            } catch (exception: GroqException) {
+            } catch (exception: DeepSeekException) {
                 exception.message ?: "AI javobini olishda xatolik yuz berdi."
             }
             isThinking = false
