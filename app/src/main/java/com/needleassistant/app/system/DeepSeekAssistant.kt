@@ -103,7 +103,7 @@ class DeepSeekAssistant {
 
     private fun parseDecision(response: String): AssistantDecision {
         val candidate = response
-            .replace(Regex("""(?s)^\\s*```(?:json)?\\s*|\\s*```\\s*$"""), "")
+            .replace(Regex("""(?s)^\s*```(?:json)?\s*|\s*```\s*$"""), "")
             .trim()
         val jsonText = candidate.substringAfter('{', "").let { inner ->
             if (inner.isEmpty()) "" else "{${inner.substringBeforeLast('}', inner)}}"
