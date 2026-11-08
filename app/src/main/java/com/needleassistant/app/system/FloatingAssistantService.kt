@@ -69,6 +69,7 @@ class FloatingAssistantService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var isTucked = false
     private var isDragging = false
+    private var overlayHiddenForGesture = false
     private var downRawX = 0f
     private var downRawY = 0f
     private var downX = 0
@@ -77,6 +78,7 @@ class FloatingAssistantService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        activeInstance = this
         createNotificationChannel()
         startAsForegroundService()
         deviceController = DeviceController(applicationContext)
@@ -492,6 +494,34 @@ class FloatingAssistantService : Service() {
         speechRecognizer = null
     }
 
+
+    private fun hideOverlaysForScrollGesture() {
+        if (overlayHiddenForGesture) return
+        overlayHiddenForGesture = true
+        panel?.let { view -> runCatching { windowManager?.removeView(view) } }
+        bubble?.let { view -> runCatching { windowManager?.removeView(view) } }
+    }
+
+    private fun restoreOverlaysAfterScrollGesture() {
+        if (!overlayHiddenForGesture) return
+        overlayHiddenForGesture = false
+        val manager = windowManager ?: return
+        try {
+            bubble?.let { view ->
+                if (!view.isAttachedToWindow) {
+                    bubbleParams?.let { manager.addView(view, it) }
+                }
+            }
+            panel?.let { view ->
+                if (!view.isAttachedToWindow) {
+                    panelParams?.let { manager.addView(view, it) }
+                }
+            }
+        } catch (_: Exception) {
+            // Keep the foreground app usable even if Android rejects restoration.
+        }
+    }
+
     private fun snapToNearestEdge() {
         val params = bubbleParams ?: return
         val right = params.x + dp(BUBBLE_SIZE_DP / 2) >= screenWidth() / 2
@@ -588,6 +618,7 @@ class FloatingAssistantService : Service() {
         deviceController = null
         serviceScope.cancel()
         getPreferences().edit().putBoolean(KEY_ENABLED, false).apply()
+        if (activeInstance === this) activeInstance = null
         super.onDestroy()
     }
 
@@ -605,6 +636,17 @@ class FloatingAssistantService : Service() {
         private const val KEY_RIGHT = "right"
         private const val CHANNEL_ID = "floating_assistant"
         private const val NOTIFICATION_ID = 7001
+        @Volatile
+        private var activeInstance: FloatingAssistantService? = null
+
+        fun hideOverlayForAccessibilityGesture() {
+            activeInstance?.hideOverlaysForScrollGesture()
+        }
+
+        fun restoreOverlayAfterAccessibilityGesture() {
+            activeInstance?.restoreOverlaysAfterScrollGesture()
+        }
+
         private const val TUCK_DELAY_MILLIS = 4_000L
         private const val BUBBLE_SIZE_DP = 56
         private const val PANEL_WIDTH_DP = 320
