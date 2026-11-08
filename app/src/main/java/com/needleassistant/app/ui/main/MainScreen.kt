@@ -44,8 +44,8 @@ import com.needleassistant.app.R
 import com.needleassistant.app.system.ChatTurn
 import com.needleassistant.app.system.DeviceController
 import com.needleassistant.app.system.FloatingAssistantService
-import com.needleassistant.app.system.GroqAssistant
-import com.needleassistant.app.system.GroqException
+import com.needleassistant.app.system.DeepSeekAssistant
+import com.needleassistant.app.system.DeepSeekException
 import com.needleassistant.app.system.SpeechOutputState
 import kotlinx.coroutines.launch
 
@@ -57,7 +57,7 @@ fun MainScreen(
 ) {
     val context = LocalContext.current
     val deviceController = remember { DeviceController(context) }
-    val groqAssistant = remember { GroqAssistant(context) }
+    val deepSeekAssistant = remember { DeepSeekAssistant() }
     val speechOutputState by deviceController.speechOutputState.collectAsState()
     val isSpeaking by deviceController.isSpeaking.collectAsState()
     val messages = remember {
@@ -71,8 +71,7 @@ fun MainScreen(
     var isListening by remember { mutableStateOf(false) }
     var showQuickActions by remember { mutableStateOf(true) }
     var floatingAssistantEnabled by remember { mutableStateOf(FloatingAssistantService.isEnabled(context)) }
-    var showGroqSettings by remember { mutableStateOf(false) }
-    var groqConfigured by remember { mutableStateOf(groqAssistant.hasApiKey) }
+    var showAiInfo by remember { mutableStateOf(false) }
     var isAiThinking by remember { mutableStateOf(false) }
     var showAssistantSetup by remember {
         mutableStateOf(!context.getSharedPreferences("assistant_setup", 0).getBoolean("completed", false))
@@ -145,37 +144,33 @@ fun MainScreen(
         if (isAiThinking || text.isBlank()) return
         showQuickActions = false
         messages.add(Message(text, isUser = true))
-        val response = deviceController.processCommand(text)
-        if (response.startsWith("Kechirasiz, bu buyruqni hali tushunmayman")) {
-            if (!groqConfigured) {
-                messages.add(
-                    Message(
-                        "Savollarga AI javob berishi uchun Groq API kalitini sozlang. Yuqoridagi ⚙ tugmasini bosing.",
-                        isUser = false
-                    )
-                )
-            } else {
-                isAiThinking = true
-                val answerIndex = messages.size
-                messages.add(Message("AI javob tayyorlamoqda...", isUser = false))
-                val conversation = messages.dropLast(1).map {
-                    ChatTurn(if (it.isUser) "user" else "assistant", it.text)
+        val localResponse = deviceController.processCommand(text)
+        if (localResponse.startsWith("Kechirasiz, bu buyruqni hali tushunmayman")) {
+            isAiThinking = true
+            val answerIndex = messages.size
+            messages.add(Message("Needle so'rovni tushunmoqda...", isUser = false))
+            val conversation = messages.dropLast(1).map {
+                ChatTurn(if (it.isUser) "user" else "assistant", it.text)
+            }
+            coroutineScope.launch {
+                val answer = try {
+                    val decision = deepSeekAssistant.process(conversation)
+                    decision.command?.let { command ->
+                        deviceController.processCommand(command).takeUnless {
+                            it.startsWith("Kechirasiz, bu buyruqni hali tushunmayman")
+                        } ?: "Bu buyruqni qurilmada bajarib bo'lmadi. Boshqacha ifodalab ko'ring."
+                    } ?: decision.answer.orEmpty()
+                } catch (exception: DeepSeekException) {
+                    exception.message ?: "DeepSeek javobini olishda xatolik yuz berdi."
                 }
-                coroutineScope.launch {
-                    val answer = try {
-                        groqAssistant.ask(conversation)
-                    } catch (exception: GroqException) {
-                        exception.message ?: "AI javobini olishda xatolik yuz berdi."
-                    }
-                    messages[answerIndex] = Message(answer, isUser = false)
-                    isAiThinking = false
-                    deviceController.speak(answer)
-                    listState.animateScrollToItem(messages.size - 1)
-                }
+                messages[answerIndex] = Message(answer, isUser = false)
+                isAiThinking = false
+                deviceController.speak(answer)
+                listState.animateScrollToItem(messages.size - 1)
             }
         } else {
-            messages.add(Message(response, isUser = false))
-            deviceController.speak(response)
+            messages.add(Message(localResponse, isUser = false))
+            deviceController.speak(localResponse)
         }
         coroutineScope.launch {
             listState.animateScrollToItem(messages.size - 1)
@@ -285,8 +280,8 @@ fun MainScreen(
                     IconButton(onClick = { showAssistantSetup = true }) {
                         Text("☷", fontSize = 20.sp)
                     }
-                    IconButton(onClick = { showGroqSettings = true }) {
-                        Text(if (groqConfigured) "⚙✓" else "⚙", fontSize = 20.sp)
+                    IconButton(onClick = { showAiInfo = true }) {
+                        Text("⚙", fontSize = 20.sp)
                     }
 
                     IconButton(onClick = {
@@ -362,21 +357,19 @@ fun MainScreen(
         }
     }
 
-    if (showGroqSettings) {
-        GroqSettingsDialog(
-            isConfigured = groqConfigured,
-            onDismiss = { showGroqSettings = false },
-            onSave = { apiKey ->
-                groqAssistant.saveApiKey(apiKey)
-                groqConfigured = true
-                showGroqSettings = false
-                messages.add(Message("Groq AI sozlandi. Endi istalgan savolingizni yozishingiz mumkin.", isUser = false))
+    if (showAiInfo) {
+        AlertDialog(
+            onDismissRequest = { showAiInfo = false },
+            title = { Text("DeepSeek Flash") },
+            text = {
+                Text(
+                    "Needle Assistant DeepSeek Flash API orqali tabiiy tilni tushunadi. " +
+                        "API kaliti ilovaga kiritilmaydi. Internet talab qilinadi; " +
+                        "qurilma buyruqlari faqat Needle qo'llab-quvvatlaydigan amallar bilan cheklangan."
+                )
             },
-            onRemove = {
-                groqAssistant.removeApiKey()
-                groqConfigured = false
-                showGroqSettings = false
-                messages.add(Message("Groq API kaliti qurilmadan o'chirildi.", isUser = false))
+            confirmButton = {
+                TextButton(onClick = { showAiInfo = false }) { Text("Tushunarli") }
             }
         )
     }
