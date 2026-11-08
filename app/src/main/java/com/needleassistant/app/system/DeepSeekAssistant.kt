@@ -162,7 +162,7 @@ class DeepSeekAssistant {
         )
         aliases[value]?.let { return it }
 
-        val appMatch = Regex("""(?i)^(?:open_app|open app|ilovani och)\\s*[:=(]?\\s*["']?(.+?)["']?\\)?$""")
+        val appMatch = Regex("""(?i)^(?:open_app|open app|ilovani och)\s*[:=(]?\s*["']?(.+?)["']?\\)?$""")
             .matchEntire(rawCommand.trim())
         if (appMatch != null) return "${appMatch.groupValues[1].trim()} ilovasini och"
 
