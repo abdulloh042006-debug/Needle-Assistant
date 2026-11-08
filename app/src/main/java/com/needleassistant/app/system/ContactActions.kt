@@ -91,12 +91,12 @@ internal class ContactActions(private val context: Context) {
     }
 
     private fun parse(command: String): Action? {
-        val sms = Regex("""(?iu)^(.+?)\\s+(?:sms|xabar)\\s+(?:yoz|yubor)(?:\\s*[:,-]\\s*(.*))?$""").matchEntire(command.trim())
+        val sms = Regex("""(?iu)^(.+?)\s+(?:sms|xabar)\s+(?:yoz|yubor)(?:\s*[:,-]\s*(.*))?$""").matchEntire(command.trim())
         if (sms != null) {
             val name = stripSuffix(sms.groupValues[1])
             if (name.isNotBlank()) return Action(name, Type.SMS, sms.groupValues.getOrNull(2)?.trim()?.takeIf(String::isNotBlank))
         }
-        val call = Regex("""(?iu)^(.+?)\\s+(?:telefon qil|qo'ng'iroq qil|qongiroq qil|qo'ng'iroq|qongiroq)$""").matchEntire(command.trim())
+        val call = Regex("""(?iu)^(.+?)\s+(?:telefon qil|qo'ng'iroq qil|qongiroq qil|qo'ng'iroq|qongiroq)$""").matchEntire(command.trim())
             ?: return null
         val name = stripSuffix(call.groupValues[1])
         return name.takeIf(String::isNotBlank)?.let { Action(it, Type.CALL) }
@@ -107,9 +107,9 @@ internal class ContactActions(private val context: Context) {
 
     private fun normalize(value: String): String =
         Normalizer.normalize(value, Normalizer.Form.NFD)
-            .replace(Regex("\\p{Mn}+"), "")
+            .replace(Regex("\p{Mn}+"), "")
             .lowercase(Locale.ROOT)
-            .replace(Regex("""[^\\p{L}\\p{N}]+"""), " ")
+            .replace(Regex("""[^\p{L}\p{N}]+"""), " ")
             .trim()
 
     private enum class Type { CALL, SMS }
