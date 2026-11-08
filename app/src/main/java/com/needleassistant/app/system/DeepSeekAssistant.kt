@@ -80,6 +80,9 @@ class DeepSeekAssistant {
     }
 
     private fun findText(json: JSONObject): String? {
+        if (json.has("type") && (json.has("command") || json.has("answer"))) {
+            return json.toString()
+        }
         val directKeys = listOf("response", "answer", "text", "content", "output", "result")
         directKeys.forEach { key ->
             val value = json.opt(key)
@@ -100,9 +103,7 @@ class DeepSeekAssistant {
 
     private fun parseDecision(response: String): AssistantDecision {
         val candidate = response
-            .removePrefix("```json")
-            .removePrefix("```")
-            .removeSuffix("```")
+            .replace(Regex("""(?s)^\\s*```(?:json)?\\s*|\\s*```\\s*$"""), "")
             .trim()
         val jsonText = candidate.substringAfter('{', "").let { inner ->
             if (inner.isEmpty()) "" else "{${inner.substringBeforeLast('}', inner)}}"
