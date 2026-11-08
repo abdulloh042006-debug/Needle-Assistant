@@ -33,8 +33,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -373,62 +371,6 @@ fun MainScreen(
             }
         )
     }
-}
-
-@Composable
-private fun GroqSettingsDialog(
-    isConfigured: Boolean,
-    onDismiss: () -> Unit,
-    onSave: (String) -> Unit,
-    onRemove: () -> Unit
-) {
-    var apiKey by remember { mutableStateOf("") }
-    var showKey by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Groq AI sozlamalari") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    "Yangi API kalitni Groq hisobingizdan kiriting. Kalit qurilmada Android Keystore bilan shifrlanadi. Groq ishlatish hisobingizdagi limitlarga bog'liq."
-                )
-                OutlinedTextField(
-                    value = apiKey,
-                    onValueChange = { apiKey = it.trim(); error = null },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    label = { Text(if (isConfigured) "Yangi API kalit" else "Groq API kalit") },
-                    visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        TextButton(onClick = { showKey = !showKey }) {
-                            Text(if (showKey) "Yashir" else "Ko'rsat")
-                        }
-                    }
-                )
-                if (isConfigured) Text("Hozir kalit sozlangan.", style = MaterialTheme.typography.labelMedium)
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                try {
-                    onSave(apiKey)
-                } catch (exception: Exception) {
-                    error = exception.message ?: "Kalitni saqlab bo'lmadi."
-                }
-            }, enabled = apiKey.isNotBlank()) { Text("Saqlash") }
-        },
-        dismissButton = {
-            Row {
-                if (isConfigured) {
-                    TextButton(onClick = onRemove) { Text("O'chirish") }
-                }
-                TextButton(onClick = onDismiss) { Text("Bekor") }
-            }
-        }
-    )
 }
 
 @Composable
