@@ -113,7 +113,7 @@ internal class ContactActions(private val context: Context) {
 
     private fun normalize(value: String): String =
         Normalizer.normalize(value, Normalizer.Form.NFD)
-            .replace(Regex("\p{Mn}+"), "")
+            .replace(Regex("""\p{Mn}+"""), "")
             .lowercase(Locale.ROOT)
             .replace(Regex("""[^\p{L}\p{N}]+"""), " ")
             .trim()
