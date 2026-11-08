@@ -187,7 +187,7 @@ internal fun AssistantSetupScreen(
             SetupCapabilityRow(
                 "Default SMS",
                 if (smsRoleHeld) "Needle standart SMS ilovasi."
-                else "SMS ilovasi/provider to'liq amalga oshirilmagan; SMS yuborish hozircha ishlamaydi.",
+                else "Needle standart SMS ilovasi emas; SMS yuborish alohida SEND_SMS ruxsati bilan ishlaydi.",
                 smsRoleHeld,
                 if (smsRoleReady && !smsRoleHeld) "Rolni so'rash" else null,
                 { onEnableCapability(SetupCapability.DEFAULT_SMS) }
