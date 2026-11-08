@@ -54,7 +54,13 @@ internal class ContactActions(private val context: Context) {
         }
         return try {
             @Suppress("DEPRECATION")
-            SmsManager.getDefault().sendTextMessage(number, null, message, null, null)
+            val manager = SmsManager.getDefault()
+            val parts = manager.divideMessage(message)
+            if (parts.size > 1) {
+                manager.sendMultipartTextMessage(number, null, ArrayList(parts), null, null)
+            } else {
+                manager.sendTextMessage(number, null, message, null, null)
+            }
             "$name ga SMS yuborish operator tarmog'iga topshirildi. Yetkazilganini operator tasdiqlaydi."
         } catch (_: SecurityException) {
             "SMS yuborishga ruxsat berilmadi. SMS ruxsatini tekshiring."
