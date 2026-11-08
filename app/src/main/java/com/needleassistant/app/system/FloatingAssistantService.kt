@@ -309,7 +309,11 @@ class FloatingAssistantService : Service() {
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ))
 
-        val panelWidth = min(dp(PANEL_WIDTH_DP), screenWidth() - dp(24)).coerceAtLeast(dp(240))
+        // Leave a clear strip beside the panel so the floating N button stays tappable.
+        val panelWidth = min(
+            dp(PANEL_WIDTH_DP),
+            screenWidth() - dp(BUBBLE_SIZE_DP + 24)
+        ).coerceAtLeast(dp(240))
         val onRight = getPreferences().getBoolean(KEY_RIGHT, params.x + params.width / 2 >= screenWidth() / 2)
         val overlayParams = WindowManager.LayoutParams(
             panelWidth,
@@ -319,7 +323,7 @@ class FloatingAssistantService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.LEFT
-            x = if (onRight) max(dp(12), screenWidth() - panelWidth - dp(12)) else dp(12)
+            x = if (onRight) dp(12) else max(dp(12), screenWidth() - panelWidth - dp(12))
             y = (params.y - dp(90)).coerceIn(dp(24), max(dp(24), screenHeight() - dp(300)))
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
                 WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
