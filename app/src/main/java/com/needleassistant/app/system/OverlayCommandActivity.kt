@@ -46,7 +46,7 @@ class OverlayCommandActivity : ComponentActivity() {
         setContent {
             NeedleAssistantTheme {
                 val controller = remember { DeviceController(applicationContext) }
-                val groqAssistant = remember { GroqAssistant(applicationContext) }
+                val deepSeekAssistant = remember { DeepSeekAssistant() }
                 DisposableEffect(controller) {
                     onDispose { controller.shutdown() }
                 }
@@ -57,11 +57,12 @@ class OverlayCommandActivity : ComponentActivity() {
                     onCommand = { command ->
                         val localResponse = controller.processCommand(command)
                         val response = if (localResponse.startsWith("Kechirasiz, bu buyruqni hali tushunmayman")) {
-                            if (!groqAssistant.hasApiKey) {
-                                "AI savollariga javob olish uchun avval asosiy oynada Groq API kalitini sozlang."
-                            } else {
-                                groqAssistant.ask(listOf(ChatTurn("user", command)))
-                            }
+                            val decision = deepSeekAssistant.process(listOf(ChatTurn("user", command)))
+                            decision.command?.let { normalizedCommand ->
+                                controller.processCommand(normalizedCommand).takeUnless {
+                                    it.startsWith("Kechirasiz, bu buyruqni hali tushunmayman")
+                                } ?: "Bu buyruqni qurilmada bajarib bo'lmadi. Boshqacha ifodalab ko'ring."
+                            } ?: decision.answer.orEmpty()
                         } else {
                             localResponse
                         }
