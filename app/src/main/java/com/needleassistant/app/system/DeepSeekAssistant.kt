@@ -38,7 +38,7 @@ class DeepSeekAssistant(context: Context) {
     }
 
     suspend fun testConnection(): String = withContext(Dispatchers.IO) {
-        val response = request("Faqat OK deb javob ber. Bu API ulanishini tekshirish so'rovi.")
+        val response = request("Faqat JSON obyektini qaytar: {\"status\":\"ok\"}. Bu API ulanishini tekshirish so'rovi.")
         response.take(160)
     }
 
@@ -47,6 +47,8 @@ class DeepSeekAssistant(context: Context) {
             ?: throw DeepSeekException("DeepSeek API token kiritilmagan. Sozlamalardan tokenni saqlang.")
         val payload = JSONObject()
             .put("model", MODEL)
+            .put("thinking", JSONObject().put("type", "disabled"))
+            .put("response_format", JSONObject().put("type", "json_object"))
             .put(
                 "messages",
                 JSONArray().put(
@@ -227,7 +229,7 @@ class DeepSeekAssistant(context: Context) {
 
     companion object {
         private const val ENDPOINT = "https://api.deepseek.com/chat/completions"
-        private const val MODEL = "deepseek-chat"
+        private const val MODEL = "deepseek-flash"
         private const val TIMEOUT_MILLIS = 30_000
         private const val MAX_CONTEXT_TURNS = 6
         private const val MAX_TURN_CHARS = 350
