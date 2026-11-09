@@ -72,7 +72,7 @@ internal fun ApiSettingsDialog(
                     Text(
                         it,
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (it.startsWith("Ulandi")) MaterialTheme.colorScheme.primary
+                        color = if (it.startsWith("Ulandi") || it.contains("saqlandi") || it.contains("o'chirildi")) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.error
                     )
                 }
