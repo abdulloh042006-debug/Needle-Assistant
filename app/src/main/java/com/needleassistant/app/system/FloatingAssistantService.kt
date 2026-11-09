@@ -60,7 +60,7 @@ class FloatingAssistantService : Service() {
     private var statusText: TextView? = null
 
     private var deviceController: DeviceController? = null
-    private val deepSeekAssistant = DeepSeekAssistant()
+    private val deepSeekAssistant by lazy(LazyThreadSafetyMode.NONE) { DeepSeekAssistant(applicationContext) }
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var speechRecognizer: SpeechRecognizer? = null
     private var isListening = false
