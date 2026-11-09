@@ -1,12 +1,13 @@
 package com.needleassistant.app.system
 
+import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
-import java.net.URLEncoder
 
 /**
  * Client for the user-supplied DeepSeek Flash text endpoint.
@@ -14,7 +15,9 @@ import java.net.URLEncoder
  * The endpoint is a GET-only text proxy, not an OpenAI-compatible API. Keep
  * provider-specific transport and response normalization isolated here.
  */
-class DeepSeekAssistant {
+class DeepSeekAssistant(context: Context) {
+    private val credentialManager = ApiCredentialManager(context.applicationContext)
+
 
     suspend fun process(messages: List<ChatTurn>): AssistantDecision = withContext(Dispatchers.IO) {
         val prompt = buildPrompt(messages)
@@ -34,27 +37,52 @@ class DeepSeekAssistant {
         append("Faqat ko'rsatilgan JSON formatlaridan birida javob ber. Markdown ishlatma.")
     }
 
+    suspend fun testConnection(): String = withContext(Dispatchers.IO) {
+        val response = request("Faqat OK deb javob ber. Bu API ulanishini tekshirish so'rovi.")
+        response.take(160)
+    }
+
     private fun request(prompt: String): String {
-        val encodedPrompt = URLEncoder.encode(prompt, Charsets.UTF_8.name())
-        val url = URL("$ENDPOINT?text=$encodedPrompt")
-        val connection = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
+        val apiKey = credentialManager.getApiKey()
+            ?: throw DeepSeekException("DeepSeek API token kiritilmagan. Sozlamalardan tokenni saqlang.")
+        val payload = JSONObject()
+            .put("model", MODEL)
+            .put(
+                "messages",
+                JSONArray().put(
+                    JSONObject()
+                        .put("role", "user")
+                        .put("content", prompt)
+                )
+            )
+            .put("stream", false)
+
+        val connection = (URL(ENDPOINT).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            doOutput = true
             connectTimeout = TIMEOUT_MILLIS
             readTimeout = TIMEOUT_MILLIS
-            setRequestProperty("Accept", "application/json, text/plain, */*")
+            setRequestProperty("Accept", "application/json")
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            setRequestProperty("Authorization", "Bearer $apiKey")
             setRequestProperty("User-Agent", "Needle-Assistant/1.0")
         }
 
         try {
+            connection.outputStream.use { output ->
+                output.write(payload.toString().toByteArray(Charsets.UTF_8))
+            }
             val responseCode = connection.responseCode
             val stream = if (responseCode in 200..299) connection.inputStream else connection.errorStream
             val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
             if (responseCode !in 200..299) {
                 throw DeepSeekException(
                     when (responseCode) {
-                        401, 403 -> "DeepSeek API so'rovga ruxsat bermadi."
-                        429 -> "DeepSeek so'rovlar limiti tugadi. Birozdan keyin qayta urinib ko'ring."
-                        else -> "DeepSeek xizmatida xatolik ($responseCode)."
+                        401, 403 -> "DeepSeek API token noto'g'ri yoki ruxsat berilmagan."
+                        402 -> "DeepSeek API hisobida mablag' yoki billing sozlamasini tekshiring."
+                        429 -> "DeepSeek API so'rovlar limiti tugadi. Birozdan keyin qayta urinib ko'ring."
+                        in 500..599 -> "DeepSeek serverida vaqtinchalik xatolik ($responseCode)."
+                        else -> "DeepSeek API xatoligi ($responseCode)."
                     }
                 )
             }
@@ -198,8 +226,8 @@ class DeepSeekAssistant {
     }
 
     companion object {
-        private const val ENDPOINT =
-            "https://bymuslim.shop/API/deepseek-v4.1-flash-1017-fast.php"
+        private const val ENDPOINT = "https://api.deepseek.com/chat/completions"
+        private const val MODEL = "deepseek-chat"
         private const val TIMEOUT_MILLIS = 30_000
         private const val MAX_CONTEXT_TURNS = 6
         private const val MAX_TURN_CHARS = 350
