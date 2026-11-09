@@ -55,7 +55,7 @@ fun MainScreen(
 ) {
     val context = LocalContext.current
     val deviceController = remember { DeviceController(context) }
-    val deepSeekAssistant = remember { DeepSeekAssistant() }
+    val deepSeekAssistant = remember(context) { DeepSeekAssistant(context.applicationContext) }
     val speechOutputState by deviceController.speechOutputState.collectAsState()
     val isSpeaking by deviceController.isSpeaking.collectAsState()
     val messages = remember {
@@ -69,7 +69,7 @@ fun MainScreen(
     var isListening by remember { mutableStateOf(false) }
     var showQuickActions by remember { mutableStateOf(true) }
     var floatingAssistantEnabled by remember { mutableStateOf(FloatingAssistantService.isEnabled(context)) }
-    var showAiInfo by remember { mutableStateOf(false) }
+    var showApiSettings by remember { mutableStateOf(false) }
     var isAiThinking by remember { mutableStateOf(false) }
     var showAssistantSetup by remember {
         mutableStateOf(!context.getSharedPreferences("assistant_setup", 0).getBoolean("completed", false))
@@ -282,7 +282,7 @@ fun MainScreen(
                     IconButton(onClick = { showAssistantSetup = true }) {
                         Text("☷", fontSize = 20.sp)
                     }
-                    IconButton(onClick = { showAiInfo = true }) {
+                    IconButton(onClick = { showApiSettings = true }) {
                         Text("⚙", fontSize = 20.sp)
                     }
 
@@ -359,20 +359,10 @@ fun MainScreen(
         }
     }
 
-    if (showAiInfo) {
-        AlertDialog(
-            onDismissRequest = { showAiInfo = false },
-            title = { Text("DeepSeek Flash") },
-            text = {
-                Text(
-                    "Needle Assistant DeepSeek Flash API orqali tabiiy tilni tushunadi. " +
-                        "API kaliti ilovaga kiritilmaydi. Internet talab qilinadi; " +
-                        "qurilma buyruqlari faqat Needle qo'llab-quvvatlaydigan amallar bilan cheklangan."
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { showAiInfo = false }) { Text("Tushunarli") }
-            }
+    if (showApiSettings) {
+        ApiSettingsDialog(
+            deepSeekAssistant = deepSeekAssistant,
+            onDismiss = { showApiSettings = false }
         )
     }
 }
