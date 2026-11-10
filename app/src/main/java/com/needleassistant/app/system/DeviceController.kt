@@ -195,6 +195,7 @@ class DeviceController(private val context: Context) : TextToSpeech.OnInitListen
 
     fun processCommand(command: String): String {
         val c = command.lowercase(Locale.getDefault()).trim()
+        ContactActions(context).execute(command)?.let { return it }
         parseTelegramCommand(command)?.let { return openTelegramChat(it) }
         parseMessageDraftCommand(command)?.let { return openSmsDraft(it) }
         parseDialCommand(command)?.let { return openDialer(it) }
@@ -423,8 +424,8 @@ class DeviceController(private val context: Context) : TextToSpeech.OnInitListen
 🎵 "musiqani qo'y" / "musiqani to'xtat"
 ⏭ "keyingi qo'shiq" / "oldingi trek"
 📜 "pastga scroll" / "yuqoriga scroll" (Accessibility yoqilgan bo'lishi kerak)
-📞 "qo'ng'iroq +998..." (raqam terish oynasini ochadi)
-✉️ "sms +998... salom" (SMS yozish oynasini ochadi)
+📞 "Nematjonga telefon qil" (kontaktga bevosita qo'ng'iroq)
+✉️ "Nematjonga SMS yoz: Salom" (kontaktga SMS yuborish)
 💬 "telegram @username ga xabar salom"
 📷 "kamerani och"
 🧮 "kalkulyatorni och"

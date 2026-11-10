@@ -46,7 +46,8 @@ internal enum class SetupCapability {
     NOTIFICATION_ACCESS,
     DEFAULT_ASSISTANT,
     DEFAULT_DIALER,
-    DEFAULT_SMS
+    DEFAULT_SMS,
+    CONTACTS_CALL_SMS
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -154,6 +155,13 @@ internal fun AssistantSetupScreen(
                 { onEnableCapability(SetupCapability.ACCESSIBILITY) }
             )
             SetupCapabilityRow(
+                "Kontaktlar, qo'ng'iroq va SMS",
+                "Kontakt nomi orqali bevosita qo'ng'iroq qilish va SMS yuborish.",
+                listOf(Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE, Manifest.permission.SEND_SMS).all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED },
+                if (listOf(Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE, Manifest.permission.SEND_SMS).all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) null else "Ruxsat berish",
+                { onEnableCapability(SetupCapability.CONTACTS_CALL_SMS) }
+            )
+            SetupCapabilityRow(
                 "Notification Access",
                 "Faol media seansini topish va musiqa/video ijrosini boshqarish uchun. Yoqish ixtiyoriy.",
                 notificationAccessEnabled,
@@ -179,14 +187,14 @@ internal fun AssistantSetupScreen(
             SetupCapabilityRow(
                 "Default SMS",
                 if (smsRoleHeld) "Needle standart SMS ilovasi."
-                else "SMS ilovasi/provider to'liq amalga oshirilmagan; SMS yuborish hozircha ishlamaydi.",
+                else "Needle standart SMS ilovasi emas; SMS yuborish alohida SEND_SMS ruxsati bilan ishlaydi.",
                 smsRoleHeld,
                 if (smsRoleReady && !smsRoleHeld) "Rolni so'rash" else null,
                 { onEnableCapability(SetupCapability.DEFAULT_SMS) }
             )
             HorizontalDivider()
             Text(
-                "Contacts, Call va SMS permissions faqat tegishli amallar amalga oshirilganda so'raladi. Device Admin bu vazifalar uchun kerak emas va so'ralmaydi. Device Owner oddiy permission emas: enterprise provisioning, ko'pincha factory reset talab qiladi.",
+                "Kontaktlar, qo'ng'iroq va SMS ruxsatlari yuqoridagi tugma orqali alohida so'raladi. Device Admin bu vazifalar uchun kerak emas va so'ralmaydi. Device Owner oddiy permission emas: enterprise provisioning, ko'pincha factory reset talab qiladi.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
