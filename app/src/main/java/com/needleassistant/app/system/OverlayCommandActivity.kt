@@ -46,7 +46,7 @@ class OverlayCommandActivity : ComponentActivity() {
         setContent {
             NeedleAssistantTheme {
                 val controller = remember { DeviceController(applicationContext) }
-                val deepSeekAssistant = remember { DeepSeekAssistant() }
+                val deepSeekAssistant = remember { DeepSeekAssistant(applicationContext) }
                 DisposableEffect(controller) {
                     onDispose { controller.shutdown() }
                 }
